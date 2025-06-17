@@ -6,6 +6,7 @@ import createCanvas from "./create-canvas";
 import TweenLite from "gsap";
 import times from "./times";
 import { random, chance } from "./random";
+import TextCollisionSystem from "./TextCollisionSystem";
 
 let textureRainFg,
   textureRainBg,
@@ -33,7 +34,7 @@ let textureFgSize = {
 
 let raindrops, renderer, canvas;
 
-// let parallax = { x: 0, y: 0 };
+let parallax = { x: 0, y: 0 };
 
 let weatherData = null;
 let curWeatherData = null;
@@ -111,6 +112,9 @@ function init() {
     }
   );
 
+  // Initialize text collision system
+  raindrops.textCollisionSystem = new TextCollisionSystem(canvas);
+
   textureFg = createCanvas(textureFgSize.width, textureFgSize.height);
   textureFgCtx = textureFg.getContext("2d");
   textureBg = createCanvas(textureBgSize.width, textureBgSize.height);
@@ -137,26 +141,49 @@ function init() {
 }
 
 function setupEvents() {
-  // setupParallax();
+  setupParallax();
   setupWeather();
   setupFlash();
+  setupTextCollisionEvents();
 }
-// function setupParallax(){
-//   document.addEventListener('mousemove',(event)=>{
-//     let x=event.pageX;
-//     let y=event.pageY;
 
-//     TweenLite.to(parallax,1,{
-//       x:((x/canvas.width)*2)-1,
-//       y:((y/canvas.height)*2)-1,
-//       ease:Quint.easeOut,
-//       onUpdate:()=>{
-//         renderer.parallaxX=parallax.x;
-//         renderer.parallaxY=parallax.y;
-//       }
-//     })
-//   });
-// }
+function setupTextCollisionEvents() {
+  // Update collision boundaries on window resize
+  window.addEventListener("resize", () => {
+    if (raindrops && raindrops.textCollisionSystem) {
+      setTimeout(() => {
+        raindrops.textCollisionSystem.update();
+      }, 100);
+    }
+  });
+
+  // Update collision boundaries when slides transition
+  const slides = document.querySelectorAll(".slide");
+  slides.forEach((slide) => {
+    slide.addEventListener("transitionend", () => {
+      if (raindrops && raindrops.textCollisionSystem) {
+        raindrops.textCollisionSystem.update();
+      }
+    });
+  });
+}
+
+function setupParallax() {
+  // document.addEventListener("mousemove", (event) => {
+  //   let x = event.pageX;
+  //   let y = event.pageY;
+  //   TweenLite.to(parallax, 1, {
+  //     x: (x / window.innerWidth) * 2 - 1,
+  //     y: (y / window.innerHeight) * 2 - 1,
+  //     ease: Quint.easeOut,
+  //     onUpdate: () => {
+  //       renderer.parallaxX = parallax.x;
+  //       renderer.parallaxY = parallax.y;
+  //     },
+  //   });
+  // });
+}
+
 function setupFlash() {
   setInterval(() => {
     if (chance(curWeatherData.flashChance)) {
@@ -169,6 +196,7 @@ function setupFlash() {
     }
   }, 500);
 }
+
 function setupWeather() {
   setupWeatherData();
   window.addEventListener("hashchange", (event) => {
@@ -176,6 +204,7 @@ function setupWeather() {
   });
   updateWeather();
 }
+
 function setupWeatherData() {
   let defaultWeather = {
     raining: true,
@@ -193,6 +222,12 @@ function setupWeatherData() {
     flashBg: null,
     flashChance: 0,
     collisionRadiusIncrease: 0.0002,
+    // Enhanced collision settings
+    textCollisionEnabled: true,
+    bounceRestitution: 0.6,
+    slideFriction: 0.1,
+    splashProbability: 0.3,
+    splashIntensity: 2,
   };
 
   function weather(data) {
@@ -204,9 +239,12 @@ function setupWeatherData() {
       rainChance: 0.35,
       dropletsRate: 50,
       raining: true,
-      // trailRate:2.5,
       fg: textureRainFg,
       bg: textureRainBg,
+      textCollisionEnabled: true,
+      bounceRestitution: 0.6,
+      slideFriction: 0.1,
+      splashProbability: 0.3,
     }),
     storm: weather({
       maxR: 55,
@@ -220,6 +258,11 @@ function setupWeatherData() {
       flashFg: textureStormLightningFg,
       flashBg: textureStormLightningBg,
       flashChance: 0.1,
+      textCollisionEnabled: true,
+      bounceRestitution: 0.8, // More energetic bouncing in storms
+      slideFriction: 0.05, // Less friction in storms
+      splashProbability: 0.5,
+      splashIntensity: 3,
     }),
     fallout: weather({
       minR: 30,
@@ -230,6 +273,11 @@ function setupWeatherData() {
       fg: textureFalloutFg,
       bg: textureFalloutBg,
       collisionRadiusIncrease: 0,
+      textCollisionEnabled: true,
+      bounceRestitution: 0.4,
+      slideFriction: 0.05, // Less friction for radioactive rain
+      splashProbability: 0.2,
+      splashIntensity: 1,
     }),
     drizzle: weather({
       minR: 10,
@@ -240,6 +288,11 @@ function setupWeatherData() {
       dropletsSize: [3.5, 6],
       fg: textureDrizzleFg,
       bg: textureDrizzleBg,
+      textCollisionEnabled: true,
+      bounceRestitution: 0.3, // Gentle drizzle doesn't bounce much
+      slideFriction: 0.15, // More friction for light drizzle
+      splashProbability: 0.1,
+      splashIntensity: 1,
     }),
     sunny: weather({
       rainChance: 0,
@@ -248,13 +301,16 @@ function setupWeatherData() {
       raining: false,
       fg: textureSunFg,
       bg: textureSunBg,
+      textCollisionEnabled: false, // No rain in sunny weather
     }),
   };
 }
+
 function updateWeather() {
   let hash = window.location.hash;
   let currentSlide = null;
   let currentNav = null;
+
   if (hash != "") {
     currentSlide = document.querySelector(hash);
   }
@@ -262,13 +318,25 @@ function updateWeather() {
     currentSlide = document.querySelector(".slide");
     hash = "#" + currentSlide.getAttribute("id");
   }
+
   currentNav = document.querySelector("[href='" + hash + "']");
   let data = weatherData[currentSlide.getAttribute("data-weather")];
   curWeatherData = data;
 
   raindrops.options = Object.assign(raindrops.options, data);
-
   raindrops.clearDrops();
+
+  // Update text collision boundaries when slide changes
+  if (raindrops.textCollisionSystem) {
+    setTimeout(() => {
+      raindrops.textCollisionSystem.update();
+      console.log(
+        `Text collision updated for ${currentSlide.getAttribute(
+          "data-weather"
+        )} weather`
+      );
+    }, 100); // Small delay to ensure DOM has updated
+  }
 
   TweenLite.fromTo(
     blend,
@@ -328,6 +396,7 @@ function flash(baseBg, baseFg, flashBg, flashFg) {
       transitionFlash(0, 0.25);
     });
 }
+
 function generateTextures(fg, bg, alpha = 1) {
   textureFgCtx.globalAlpha = alpha;
   textureFgCtx.drawImage(fg, 0, 0, textureFgSize.width, textureFgSize.height);
@@ -335,3 +404,123 @@ function generateTextures(fg, bg, alpha = 1) {
   textureBgCtx.globalAlpha = alpha;
   textureBgCtx.drawImage(bg, 0, 0, textureBgSize.width, textureBgSize.height);
 }
+
+// Debug functions (remove in production)
+function enableDebugMode() {
+  console.log("Debug mode enabled - Text collision boundaries will be visible");
+
+  const debugCanvas = document.createElement("canvas");
+  debugCanvas.width = canvas.width;
+  debugCanvas.height = canvas.height;
+  debugCanvas.style.position = "absolute";
+  debugCanvas.style.top = "0";
+  debugCanvas.style.left = "0";
+  debugCanvas.style.pointerEvents = "none";
+  debugCanvas.style.zIndex = "1000";
+  debugCanvas.style.opacity = "0.7";
+
+  const debugCtx = debugCanvas.getContext("2d");
+  document.body.appendChild(debugCanvas);
+
+  function drawDebugInfo() {
+    debugCtx.clearRect(0, 0, debugCanvas.width, debugCanvas.height);
+
+    if (raindrops && raindrops.textCollisionSystem) {
+      raindrops.textCollisionSystem.drawDebugBounds(debugCtx);
+
+      // Draw collision count
+      debugCtx.fillStyle = "white";
+      debugCtx.font = "16px Arial";
+      debugCtx.fillText(
+        `Collision Bounds: ${raindrops.textCollisionSystem.collisionBounds.length}`,
+        10,
+        30
+      );
+      debugCtx.fillText(`Active Drops: ${raindrops.drops.length}`, 10, 50);
+      debugCtx.fillText(
+        `Weather: ${
+          curWeatherData
+            ? Object.keys(weatherData).find(
+                (key) => weatherData[key] === curWeatherData
+              )
+            : "None"
+        }`,
+        10,
+        70
+      );
+    }
+
+    requestAnimationFrame(drawDebugInfo);
+  }
+
+  drawDebugInfo();
+}
+
+// Enhanced collision event tracking
+function setupCollisionTracking() {
+  let collisionCount = 0;
+  let lastCollisionTime = 0;
+
+  // Override collision detection to add tracking
+  if (raindrops && raindrops.textCollisionSystem) {
+    const originalCheckCollision =
+      raindrops.textCollisionSystem.checkCollision.bind(
+        raindrops.textCollisionSystem
+      );
+
+    raindrops.textCollisionSystem.checkCollision = function (drop) {
+      const result = originalCheckCollision(drop);
+
+      if (result.collision) {
+        collisionCount++;
+        lastCollisionTime = Date.now();
+
+        // Add visual feedback
+        if (result.element) {
+          result.element.classList.add("collision-active");
+          setTimeout(() => {
+            result.element.classList.remove("collision-active");
+          }, 300);
+        }
+
+        // Log collision data
+        console.log(`Collision #${collisionCount}:`, {
+          dropPosition: { x: drop.x, y: drop.y },
+          dropRadius: drop.r,
+          elementBounds: result.bounds,
+          normal: result.normal,
+        });
+      }
+
+      return result;
+    };
+  }
+}
+
+// Collision statistics
+function getCollisionStats() {
+  if (raindrops && raindrops.textCollisionSystem) {
+    return {
+      collisionBounds: raindrops.textCollisionSystem.collisionBounds.length,
+      activeDrops: raindrops.drops.length,
+      currentWeather: curWeatherData
+        ? Object.keys(weatherData).find(
+            (key) => weatherData[key] === curWeatherData
+          )
+        : "None",
+      textCollisionEnabled: curWeatherData
+        ? curWeatherData.textCollisionEnabled
+        : false,
+    };
+  }
+  return null;
+}
+
+// Expose debug functions to global scope for console access
+window.enableRainDebug = enableDebugMode;
+window.setupCollisionTracking = setupCollisionTracking;
+window.getCollisionStats = getCollisionStats;
+
+// Auto-enable debug mode in development (remove in production)
+// enableDebugMode();
+// setupCollisionTracking();

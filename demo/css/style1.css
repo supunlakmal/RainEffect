@@ -114,7 +114,6 @@
 	font-weight: 700;
 }
 
-
 /* Content */
 
 .slide__element {
@@ -156,10 +155,152 @@
 	.slideshow {
 		font-size: 75%;
 	}
+
 	.slide {
 		padding-top: 35vh;
 	}
+
 	.slideshow__nav {
 		bottom: 6em;
 	}
+}
+
+.slide__element {
+	/* Add subtle text shadow for better collision detection visibility */
+	text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+
+	/* Add subtle background for better rain interaction visibility */
+	background: rgba(255, 255, 255, 0.05);
+	padding: 10px 20px;
+	border-radius: 8px;
+	backdrop-filter: blur(2px);
+
+	/* Ensure text is properly positioned for collision detection */
+	position: relative;
+	z-index: 10;
+
+	/* Smooth transitions for dynamic effects */
+	transition: all 0.3s ease;
+}
+
+.slide__element--temp {
+	/* Larger collision area for temperature text */
+	padding: 15px 25px;
+	font-weight: 700;
+
+	/* More prominent background for large text */
+	background: rgba(255, 255, 255, 0.08);
+	border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.slide__element--date {
+	/* Smaller collision area for date text */
+	padding: 8px 15px;
+
+	/* Subtle background */
+	background: rgba(255, 255, 255, 0.03);
+}
+
+/* Enhanced effects for different weather types */
+.slide[data-weather="rain"] .slide__element {
+	background: rgba(100, 150, 200, 0.1);
+	border: 1px solid rgba(100, 150, 200, 0.2);
+}
+
+.slide[data-weather="storm"] .slide__element {
+	background: rgba(80, 80, 120, 0.15);
+	border: 1px solid rgba(80, 80, 120, 0.3);
+	text-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
+}
+
+.slide[data-weather="drizzle"] .slide__element {
+	background: rgba(120, 140, 160, 0.08);
+	border: 1px solid rgba(120, 140, 160, 0.15);
+}
+
+.slide[data-weather="fallout"] .slide__element {
+	background: rgba(100, 120, 80, 0.12);
+	border: 1px solid rgba(100, 120, 80, 0.25);
+	text-shadow: 0 0 8px rgba(150, 200, 100, 0.4);
+}
+
+.slide[data-weather="sunny"] .slide__element {
+	background: rgba(255, 200, 100, 0.1);
+	border: 1px solid rgba(255, 200, 100, 0.2);
+	text-shadow: 0 2px 8px rgba(255, 200, 100, 0.4);
+}
+
+/* Animation for rain collision effects */
+@keyframes rainSplash {
+	0% {
+		transform: scale(1);
+		box-shadow: 0 0 0 rgba(255, 255, 255, 0.6);
+	}
+
+	50% {
+		transform: scale(1.02);
+		box-shadow: 0 0 20px rgba(255, 255, 255, 0.3);
+	}
+
+	100% {
+		transform: scale(1);
+		box-shadow: 0 0 0 rgba(255, 255, 255, 0);
+	}
+}
+
+/* Debug mode styles (remove in production) */
+.debug-collision-bounds {
+	position: absolute;
+	border: 2px solid red;
+	background: rgba(255, 0, 0, 0.1);
+	pointer-events: none;
+	z-index: 9999;
+}
+
+/* Hover effects for interactive elements */
+.nav-item:hover .slide__element {
+	animation: rainSplash 0.6s ease-out;
+}
+
+/* Responsive adjustments for collision detection */
+@media screen and (max-width: 768px) {
+	.slide__element {
+		padding: 8px 15px;
+		font-size: 0.9em;
+	}
+
+	.slide__element--temp {
+		padding: 12px 20px;
+	}
+
+	.slide__element--date {
+		padding: 6px 12px;
+	}
+}
+
+/* Enhanced collision visual feedback */
+.slide__element.collision-active {
+	animation: rainSplash 0.3s ease-out;
+	background: rgba(255, 255, 255, 0.15) !important;
+}
+
+/* Ripple effect for rain collision */
+@keyframes ripple {
+	0% {
+		transform: scale(1);
+		opacity: 1;
+	}
+
+	100% {
+		transform: scale(1.5);
+		opacity: 0;
+	}
+}
+
+.rain-ripple {
+	position: absolute;
+	border: 2px solid rgba(255, 255, 255, 0.6);
+	border-radius: 50%;
+	animation: ripple 0.6s ease-out;
+	pointer-events: none;
 }
