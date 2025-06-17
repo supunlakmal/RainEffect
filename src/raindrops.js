@@ -18,6 +18,8 @@ const Drop = {
   isNew: true,
   killed: false,
   shrink: 0,
+  isSplash: false,
+  isTrail: false,
 };
 const defaultOptions = {
   minR: 10,
@@ -45,6 +47,10 @@ const defaultOptions = {
   slideFriction: 0.1,
   splashProbability: 0.3,
   splashIntensity: 2,
+  flowChanneling: true,
+  windStrength: 0,
+  windDirection: 0,
+  naturalClustering: true,
 };
 
 function Raindrops(width, height, scale, dropAlpha, dropColor, options = {}) {
@@ -282,7 +288,7 @@ Raindrops.prototype = {
     this.ctx.drawImage(this.droplets, 0, 0, this.width, this.height);
   },
 
-  // Enhanced updateDrops method with text collision
+  // Enhanced updateDrops method with text collision and natural flow
   updateDrops(timeScale) {
     let newDrops = [];
 
@@ -298,7 +304,7 @@ Raindrops.prototype = {
 
     this.drops.forEach(function (drop, i) {
       if (!drop.killed) {
-        // === TEXT COLLISION DETECTION ===
+        // === ENHANCED TEXT COLLISION DETECTION ===
         if (this.textCollisionSystem && this.options.textCollisionEnabled) {
           const collisionResult = this.textCollisionSystem.checkCollision(drop);
 
@@ -307,8 +313,14 @@ Raindrops.prototype = {
           }
         }
 
-        // update gravity
-        // (chance of drops "creeping down")
+        // === NATURAL PHYSICS ===
+        // Enhanced gravity with air resistance
+        const airResistance = 0.98; // Slight air resistance
+        drop.momentum *= airResistance;
+        drop.momentumX *= airResistance;
+
+        // Gravity influence based on drop size
+        const gravityInfluence = Math.min(1, drop.r / this.options.maxR);
         if (
           chance(
             (drop.r - this.options.minR * this.options.dropFallMultiplier) *
@@ -316,9 +328,11 @@ Raindrops.prototype = {
               timeScale
           )
         ) {
-          drop.momentum += random((drop.r / this.options.maxR) * 4);
+          drop.momentum +=
+            random((drop.r / this.options.maxR) * 4) * gravityInfluence;
         }
-        // clean small drops
+
+        // Enhanced drop lifecycle
         if (
           this.options.autoShrink &&
           drop.r <= this.options.minR &&
@@ -326,25 +340,39 @@ Raindrops.prototype = {
         ) {
           drop.shrink += 0.01;
         }
-        //update shrinkage
+
+        // Special behavior for splash and trail drops
+        if (drop.isSplash) {
+          drop.shrink += 0.02 * timeScale; // Splash drops evaporate faster
+          drop.momentum += 1; // Affected more by gravity
+        }
+
+        if (drop.isTrail) {
+          drop.spreadY *= 1.02; // Trail drops become more elongated
+        }
+
         drop.r -= drop.shrink * timeScale;
         if (drop.r <= 0) drop.killed = true;
 
-        // update trails
-        if (this.options.raining) {
+        // === ENHANCED TRAIL GENERATION ===
+        if (this.options.raining && !drop.isSplash) {
           drop.lastSpawn += drop.momentum * timeScale * this.options.trailRate;
           if (drop.lastSpawn > drop.nextSpawn) {
+            // Create more realistic trail based on drop velocity
+            const trailScale = Math.min(1, drop.momentum / 10);
+
             let trailDrop = this.createDrop({
               x: drop.x + random(-drop.r, drop.r) * 0.1,
               y: drop.y - drop.r * 0.01,
-              r: drop.r * random(...this.options.trailScaleRange),
+              r: drop.r * random(...this.options.trailScaleRange) * trailScale,
               spreadY: drop.momentum * 0.1,
+              momentumX: drop.momentumX * 0.3,
+              momentum: drop.momentum * 0.7,
               parent: drop,
             });
 
             if (trailDrop != null) {
               newDrops.push(trailDrop);
-
               drop.r *= Math.pow(0.97, timeScale);
               drop.lastSpawn = 0;
               drop.nextSpawn =
@@ -355,27 +383,32 @@ Raindrops.prototype = {
           }
         }
 
-        //normalize spread
-        drop.spreadX *= Math.pow(0.4, timeScale);
-        drop.spreadY *= Math.pow(0.7, timeScale);
+        // === NATURAL SPREAD NORMALIZATION ===
+        // More realistic spread decay
+        drop.spreadX *= Math.pow(0.5, timeScale);
+        drop.spreadY *= Math.pow(0.8, timeScale);
 
-        //update position
+        // === ENHANCED POSITION UPDATE ===
         let moved = drop.momentum > 0;
         if (moved && !drop.killed) {
           drop.y += drop.momentum * this.options.globalTimeScale;
           drop.x += drop.momentumX * this.options.globalTimeScale;
+
+          // Boundary checking
           if (drop.y > this.height / this.scale + drop.r) {
+            drop.killed = true;
+          }
+          if (drop.x < -drop.r || drop.x > this.width / this.scale + drop.r) {
             drop.killed = true;
           }
         }
 
-        // collision
+        // === EXISTING DROP-TO-DROP COLLISION ===
         let checkCollision = (moved || drop.isNew) && !drop.killed;
         drop.isNew = false;
 
         if (checkCollision) {
           this.drops.slice(i + 1, i + 70).forEach((drop2) => {
-            //basic check
             if (
               drop != drop2 &&
               drop.r > drop2.r &&
@@ -386,7 +419,7 @@ Raindrops.prototype = {
               let dx = drop2.x - drop.x;
               let dy = drop2.y - drop.y;
               var d = Math.sqrt(dx * dx + dy * dy);
-              //if it's within acceptable distance
+
               if (
                 d <
                 (drop.r + drop2.r) *
@@ -401,9 +434,11 @@ Raindrops.prototype = {
                 let a1 = pi * (r1 * r1);
                 let a2 = pi * (r2 * r2);
                 let targetR = Math.sqrt((a1 + a2 * 0.8) / pi);
+
                 if (targetR > this.options.maxR) {
                   targetR = this.options.maxR;
                 }
+
                 drop.r = targetR;
                 drop.momentumX += dx * 0.1;
                 drop.spreadX = 0;
@@ -423,22 +458,27 @@ Raindrops.prototype = {
           });
         }
 
-        //slowdown momentum
+        // === ENHANCED MOMENTUM DECAY ===
+        // More realistic momentum decay
         drop.momentum -=
           Math.max(1, this.options.minR * 0.5 - drop.momentum) *
           0.1 *
           timeScale;
         if (drop.momentum < 0) drop.momentum = 0;
-        drop.momentumX *= Math.pow(0.7, timeScale);
 
+        // Horizontal momentum decay with wind resistance
+        drop.momentumX *= Math.pow(0.8, timeScale);
+
+        // === FINAL DROP PROCESSING ===
         if (!drop.killed) {
           newDrops.push(drop);
-          if (moved && this.options.dropletsRate > 0)
+          if (moved && this.options.dropletsRate > 0) {
             this.clearDroplets(
               drop.x,
               drop.y,
               drop.r * this.options.dropletsCleaningRadiusMultiplier
             );
+          }
           this.drawDrop(this.ctx, drop);
         }
       }
@@ -447,94 +487,252 @@ Raindrops.prototype = {
     this.drops = newDrops;
   },
 
-  // Text collision handling method
+  // Enhanced text collision handling method
   handleTextCollision(drop, collisionInfo) {
     if (!this.textCollisionSystem) return;
 
-    const { bounds, normal } = collisionInfo;
+    if (collisionInfo.type === "solid") {
+      // Direct hit - create splash and bounce/slide
+      this.handleSolidTextCollision(drop, collisionInfo);
+    } else if (collisionInfo.type === "flow") {
+      // Flow influence - guide rain around text
+      this.handleFlowInfluence(drop, collisionInfo);
+    }
+  },
 
-    // Calculate collision response based on impact velocity
+  handleSolidTextCollision(drop, collisionInfo) {
+    const { bounds, normal } = collisionInfo;
     const impactSpeed = Math.sqrt(
       drop.momentum * drop.momentum + drop.momentumX * drop.momentumX
     );
 
-    if (impactSpeed > 15) {
-      // High velocity - bounce
+    if (impactSpeed > 12) {
+      // Strong impact - bounce with splash
       this.bounceOffSurface(drop, normal);
-    } else {
-      // Low velocity - slide along surface
-      this.slideAlongSurface(drop, normal, bounds);
-    }
 
-    // Add visual effects for collision
-    drop.spreadX = Math.max(drop.spreadX, 1.0);
-    drop.spreadY = Math.max(drop.spreadY, 0.8);
-
-    // Create smaller droplets on collision
-    if (chance(this.options.splashProbability)) {
-      for (let j = 0; j < this.options.splashIntensity; j++) {
-        let splashDrop = this.createDrop({
-          x: drop.x + random(-1, 1) * drop.r * 0.5,
-          y: drop.y + random(-1, 1) * drop.r * 0.5,
-          r: drop.r * (0.2 + random(0.3)),
-          momentumX: random(-1, 1) * 6,
-          momentum: random(2),
-          spreadX: 0.5,
-          spreadY: 0.5,
-          parent: drop,
-        });
-
-        if (splashDrop) {
-          this.addDrop(splashDrop);
-        }
+      // Create dramatic splash effect
+      if (chance(0.6)) {
+        this.createSplashEffect(drop, "impact");
       }
+    } else {
+      // Gentle impact - slide and flow
+      this.slideAlongSurface(drop, normal, bounds);
 
-      // Reduce original drop size after splash
-      drop.r *= 0.9;
+      // Create gentle flow effect
+      if (chance(0.3)) {
+        this.createSplashEffect(drop, "flow");
+      }
     }
 
-    // Add some randomness for more natural behavior
-    drop.momentumX += random(-1, 1) * 2;
-    drop.momentum *= 0.8; // Energy loss from collision
+    // Visual feedback
+    drop.spreadX = Math.max(drop.spreadX, 0.8);
+    drop.spreadY = Math.max(drop.spreadY, 0.6);
+
+    // Energy loss
+    drop.momentum *= 0.8;
+    drop.momentumX *= 0.85;
   },
 
-  bounceOffSurface(drop, normal) {
-    const restitution = this.options.bounceRestitution;
+  handleFlowInfluence(drop, collisionInfo) {
+    const flow = collisionInfo.flow;
+    if (!flow) return;
 
-    // Reflect velocity off surface normal
+    // Calculate influence based on drop size and distance
+    const dropInfluence = Math.min(1.0, drop.r / 15);
+    const flowStrength = flow.strength * dropInfluence;
+
+    // Apply different flow behaviors
+    switch (flow.type) {
+      case "deflection":
+        // Strong deflection around text edges
+        drop.momentumX += flow.x * flowStrength * 1.2;
+        drop.momentum += flow.y * flowStrength * 0.8;
+
+        // Create stream effect
+        if (chance(0.2)) {
+          drop.spreadY = Math.max(drop.spreadY, 0.3);
+        }
+        break;
+
+      case "flow":
+        // Smooth flow around text
+        drop.momentumX += flow.x * flowStrength * 0.6;
+        drop.momentum += flow.y * flowStrength * 0.5;
+
+        // Slight streaming
+        drop.spreadX *= 1.1;
+        break;
+
+      case "channel":
+        // Channeling effect below text
+        drop.momentumX += flow.x * flowStrength * 0.8;
+        drop.momentum += flow.y * flowStrength * 0.7;
+
+        // Enhanced streaming effect
+        drop.spreadY = Math.max(drop.spreadY, 0.4);
+
+        // Create water trails
+        if (chance(0.4)) {
+          this.createWaterTrail(drop);
+        }
+        break;
+    }
+
+    // Limit velocity to realistic values
+    const maxVel = 20;
+    const totalVel = Math.sqrt(
+      drop.momentumX * drop.momentumX + drop.momentum * drop.momentum
+    );
+    if (totalVel > maxVel) {
+      const scale = maxVel / totalVel;
+      drop.momentumX *= scale;
+      drop.momentum *= scale;
+    }
+  },
+
+  createSplashEffect(drop, type) {
+    const splashCount = type === "impact" ? this.options.splashIntensity : 1;
+    const splashRange = type === "impact" ? 1.5 : 0.8;
+
+    for (let i = 0; i < splashCount; i++) {
+      const angle = (Math.PI * 2 * i) / splashCount + random(-0.5, 0.5);
+      const speed = random(2, 6);
+      const size = drop.r * random(0.15, 0.4);
+
+      const splashDrop = this.createDrop({
+        x: drop.x + random(-drop.r, drop.r) * 0.5,
+        y: drop.y + random(-drop.r, drop.r) * 0.5,
+        r: size,
+        momentumX: Math.cos(angle) * speed * splashRange,
+        momentum: Math.sin(angle) * speed * 0.5 + random(1, 3),
+        spreadX: 0.6,
+        spreadY: 0.4,
+        parent: drop,
+        // Mark as splash drop for different behavior
+        isSplash: true,
+      });
+
+      if (splashDrop) {
+        this.addDrop(splashDrop);
+      }
+    }
+
+    // Reduce original drop after splash
+    drop.r *= type === "impact" ? 0.7 : 0.9;
+  },
+
+  createWaterTrail(drop) {
+    // Create flowing water trail effect
+    if (drop.momentum > 5) {
+      const trailDrop = this.createDrop({
+        x: drop.x + random(-2, 2),
+        y: drop.y - drop.r * 0.5,
+        r: drop.r * random(0.3, 0.6),
+        momentumX: drop.momentumX * 0.8 + random(-1, 1),
+        momentum: drop.momentum * 0.9,
+        spreadX: 0.2,
+        spreadY: 0.8, // Elongated for streaming effect
+        parent: drop,
+        isTrail: true,
+      });
+
+      if (trailDrop) {
+        this.addDrop(trailDrop);
+      }
+    }
+  },
+
+  // Enhanced bouncing with more realistic physics
+  bounceOffSurface(drop, normal) {
+    const restitution = this.options.bounceRestitution * 0.6; // Reduced for more realistic bouncing
+
+    // Calculate reflection
     const dotProduct = drop.momentumX * normal.x + drop.momentum * normal.y;
 
     drop.momentumX = drop.momentumX - 2 * dotProduct * normal.x * restitution;
     drop.momentum = drop.momentum - 2 * dotProduct * normal.y * restitution;
 
-    // Add some spread effect
-    drop.spreadX = Math.max(drop.spreadX, 0.5);
-    drop.spreadY = Math.max(drop.spreadY, 0.5);
+    // Add natural randomness
+    drop.momentumX += random(-1, 1);
+    drop.momentum += random(-0.5, 0.5);
+
+    // Enhanced spread effect
+    drop.spreadX = Math.max(drop.spreadX, 0.8);
+    drop.spreadY = Math.max(drop.spreadY, 0.6);
   },
 
+  // Enhanced sliding with flow physics
   slideAlongSurface(drop, normal, bounds) {
     const friction = this.options.slideFriction;
 
     if (normal.y < 0) {
-      // Hit top surface - slide along it
-      drop.y = bounds.y - drop.r;
-      drop.momentum = Math.abs(drop.momentum) * 0.3;
-      drop.momentumX *= 1 - friction;
+      // Hit top - flow horizontally along surface
+      drop.y = bounds.y - drop.r - 1; // Small offset to prevent sticking
 
-      // Add slight downward slope effect
-      if (Math.abs(drop.momentumX) < 1) {
-        drop.momentumX += drop.x > bounds.centerX ? 0.5 : -0.5;
-      }
+      // Determine flow direction based on impact angle and surface slope
+      const impactAngle = Math.atan2(drop.momentum, drop.momentumX);
+      const surfaceFlow = drop.x > bounds.centerX ? 1 : -1;
+
+      // Convert vertical momentum to horizontal flow
+      const flowSpeed = Math.abs(drop.momentum) * 0.6;
+      drop.momentumX = surfaceFlow * flowSpeed * (1 - friction);
+      drop.momentum = Math.abs(drop.momentum) * 0.2; // Small downward component
+
+      // Create flowing effect
+      drop.spreadY = Math.max(drop.spreadY, 0.5);
     } else if (normal.y > 0) {
-      // Hit bottom surface
-      drop.y = bounds.bottom + drop.r;
-      drop.momentum = -Math.abs(drop.momentum) * 0.2;
+      // Hit bottom - bounce slightly and flow away
+      drop.y = bounds.bottom + drop.r + 1;
+      drop.momentum = -Math.abs(drop.momentum) * 0.3;
+      drop.momentumX *= 0.8;
     } else if (normal.x !== 0) {
-      // Hit side surface - slide down
-      drop.x = normal.x > 0 ? bounds.right + drop.r : bounds.x - drop.r;
-      drop.momentumX = 0;
-      drop.momentum += 2;
+      // Hit side - flow around edge
+      const offset = normal.x > 0 ? 2 : -2;
+      drop.x = (normal.x > 0 ? bounds.right : bounds.x) + offset;
+
+      // Flow around the edge
+      drop.momentumX = normal.x * 1.5; // Flow away from surface
+      drop.momentum += 4; // Accelerate downward due to gravity
+
+      // Create edge flow effect
+      drop.spreadX = Math.max(drop.spreadX, 0.4);
     }
+  },
+
+  // Add method to create natural rain clustering
+  createRainCluster(centerX, centerY, intensity = 1) {
+    const clusterSize = 3 + Math.floor(intensity * 3);
+    const spreadRange = 15 + intensity * 10;
+
+    for (let i = 0; i < clusterSize; i++) {
+      const angle = (Math.PI * 2 * i) / clusterSize + random(-0.5, 0.5);
+      const distance = random(0, spreadRange);
+
+      const clusterDrop = this.createDrop({
+        x: centerX + Math.cos(angle) * distance,
+        y: centerY + Math.sin(angle) * distance * 0.5,
+        r: random(this.options.minR, this.options.maxR * 0.8),
+        momentum: random(2, 6) * intensity,
+        momentumX: random(-2, 2),
+        spreadX: 0.3,
+        spreadY: 0.3,
+      });
+
+      if (clusterDrop) {
+        this.addDrop(clusterDrop);
+      }
+    }
+  },
+
+  // Enhanced method to simulate wind effects
+  applyWindEffect(windStrength = 0, windDirection = 0) {
+    this.drops.forEach((drop) => {
+      if (!drop.killed && !drop.isSplash) {
+        const windInfluence = Math.min(1, windStrength * (1 / drop.r));
+        drop.momentumX += Math.cos(windDirection) * windInfluence;
+        drop.momentum += Math.sin(windDirection) * windInfluence * 0.3;
+      }
+    });
   },
 
   // Method to update text collision system
