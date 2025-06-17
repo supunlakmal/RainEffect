@@ -22,13 +22,16 @@
     "extend": "^3.0.0",
     "fs": "0.0.2",
     "glslify": "^2.3.1",
-    "gulp-uglify": "^1.5.3",
+    "graceful-fs": "^4.2.11",
     "gsap": "^1.18.0",
-    "gulp": "^3.9.0",
+    "gulp": "^4.0.2",
     "gulp-babel": "^5.2.1",
     "gulp-connect": "^2.2.0",
     "gulp-streamify": "^1.0.2",
+    "gulp-uglify": "^1.5.3",
     "uglify-js": "^2.5.0",
+    "vinyl-buffer": "^1.0.1",
+    "vinyl-fs": "^3.0.3",
     "vinyl-source-stream": "^1.1.0"
   }
 }

@@ -1,30 +1,37 @@
-var gulp = require('gulp'),
-  fs = require('fs'),
-  source = require('vinyl-source-stream'),
-  browserify = require('browserify'),
-  uglify = require('gulp-uglify'),
-  streamify = require('gulp-streamify'),
+var gulp = require("gulp"),
+  fs = require("fs"),
+  source = require("vinyl-source-stream"),
+  browserify = require("browserify"),
+  uglify = require("gulp-uglify"),
+  streamify = require("gulp-streamify"),
   babelify = require("babelify");
-	gsap = require("gsap");
-	glslify = require("glslify");
 
-function compileJS(file){
-  browserify('src/'+file+'.js',{debug:true})
+function compileJS(file) {
+  return browserify("src/" + file + ".js", { debug: true })
     .transform(babelify)
-    .transform('glslify')
+    .transform("glslify")
     .bundle()
-    .on("error", function (err) { console.log("Error : " + err.message); })
-    .pipe(source(file+'.min.js'))
+    .on("error", function (err) {
+      console.log("Error : " + err.message);
+      this.emit("end");
+    })
+    .pipe(source(file + ".min.js"))
     .pipe(streamify(uglify()))
-    .pipe(gulp.dest('demo/js'));
+    .pipe(gulp.dest("demo/js"));
 }
-gulp.task('default',['js1','js2','js3'],function(){});
-gulp.task('js1',function(){
-  compileJS('index');
+
+// Define individual tasks
+gulp.task("js1", function () {
+  return compileJS("index");
 });
-gulp.task('js2',function(){
-  compileJS('index2');
+
+gulp.task("js2", function () {
+  return compileJS("index2");
 });
-gulp.task('js3',function(){
-  compileJS('index3');
+
+gulp.task("js3", function () {
+  return compileJS("index3");
 });
+
+// Define default task
+gulp.task("default", gulp.series("js1", "js2", "js3"));
