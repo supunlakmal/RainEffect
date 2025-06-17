@@ -33,7 +33,7 @@ let textureFgSize = {
 
 let raindrops, renderer, canvas;
 
-let parallax = { x: 0, y: 0 };
+// let parallax = { x: 0, y: 0 };
 
 let weatherData = null;
 let curWeatherData = null;
